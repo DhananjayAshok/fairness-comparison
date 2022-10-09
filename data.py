@@ -8,8 +8,8 @@ data_dir = "data/"
 safe_mkdir(data_dir)
 
 
-def get_csv_from_url(url):
-    return pd.read_csv(url)
+def get_csv_from_url(url, names=None, delimiter=","):
+    return pd.read_csv(url, names=names, delimiter=delimiter)
 
 
 class Dataset:
@@ -95,9 +95,15 @@ class Dataset:
 
 
 def get_dataset(name):
-    assert name in ["ProPublica COMPAS", "COMPAS"]
-    if name in ["ProPublica COMPAS", "COMPAS"]:
+    assert name in ["propublica compas", "compas", "adults", "german", "hmda"]
+    if name.lower() in ["propublica compas", "compas"]:
         return get_compas()
+    elif name.lower() in ["adults"]:
+        return get_adults()
+    elif name.lower() in ["german"]:
+        return get_german()
+    elif name.lower() in ["hmda"]:
+        return get_hmda()
 
 
 def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=None, auto_detect_date=True, numerical_to_float=True, below_threshold_other=0.95, few_unique_to_cat=10, drop_na_col_perc=0.4, dropna=True):
@@ -123,7 +129,7 @@ def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=N
         for col in data:
             if len(data[col].unique()) <= few_unique_to_cat:
                 data[col] = data[col].astype("category")
-    if 1> below_threshold_other > 0:
+    if 1 > below_threshold_other > 0:
         cols = list(data.select_dtypes(include=["object", "category"]).columns.values)
         for col in cols:
             percs = data[col].value_counts() / len(data[col])
@@ -154,10 +160,45 @@ def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=N
 def get_compas():
     data = get_csv_from_url("https://raw.githubusercontent.com/propublica/"
                             "compas-analysis/master/compas-scores-two-years.csv")
-    drop_cols = ["id", "name", "first", "last"]
+    drop_cols = ["id", "name", "first", "last", "c_case_number"]
     preprocess(data, drop_cols=drop_cols)
     d = Dataset(name="COMPAS", data=data, target_col="two_year_recid", protected_col="race")
     return d
-    
+
+
+def get_adults():
+    names = ["age", "workclass", "fnlwgt", "education", "education-num", "marital-status", "occupation", "relationship",
+             "race", "sex", "capital-gain", "capital-loss", "hours-per-week", "native-country", "target"]
+    data = get_csv_from_url("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data", names=names)
+    drop_cols = []
+    preprocess(data, drop_cols=drop_cols)
+    print(data.columns)
+    d = Dataset(name="Adults", data=data, target_col="target", protected_col="race")
+    return d
+
+
+def get_german():
+    names = ["c_status", "duration", "c_history", "purpose", "credit_amnt", "savings_account/bonds", "employment_since",
+             "installment_rate", "personal_status", "other_debtors", "residence_since", "property", "age",
+             "other_plans", "hosuing", "ncredits", "job", "ndependants", "telephone", "foreign", "target"]
+    data = get_csv_from_url("https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data",
+                            names=names, delimiter=" ")
+    drop_cols = []
+    preprocess(data, drop_cols=drop_cols)
+    d = Dataset(name="Adults", data=data, target_col="target", protected_col="race")
+    return d
+
+
+def get_hmda():
+    data = pd.read_csv(data_dir+"/ny_hmda_2015.csv")
+    filter1 = (data['action_taken'] >= 1) & (data['action_taken'] <= 3)
+    data = data[filter1]
+    drop_cols = ["action_taken_name", "agency_name", "state_name", "applicant_race_1"]
+    preprocess(data, drop_cols=drop_cols)
+    d = Dataset(name="HMDA", data=data, target_col="action_taken", protected_col="applicant_race_name_1")
+    # You can get this from: https://www.kaggle.com/datasets/jboysen/ny-home-mortgage
+    return d
+
+
 
 
