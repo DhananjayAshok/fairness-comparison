@@ -32,8 +32,7 @@ class Dataset:
         return self.length
 
     def __getitem__(self, i):
-       return self.X_func(None).iloc[i], self.y_func(None).iloc[i] 
-
+        return self.X_func(None).iloc[i], self.y_func(None).iloc[i]
 
     def get_split_data(self, train_size=0.8):
         assert 0.01 < train_size < 0.99
@@ -48,7 +47,7 @@ class Dataset:
         i=0
         while i<len(y)-1:
             yield X[i:i+batch_size], y[i:i+batch_size]
-            i+=batch_size
+            i += batch_size
 
     def get_simple_generators(self, train_size=0.8, batch_size=32, val_batch_size=None):
         if val_batch_size is None:
@@ -56,8 +55,8 @@ class Dataset:
         elif val_batch_size == -1:
             val_batch_size=len(self)
         X_train, y_train, X_val, y_val = self.get_split_data(train_size=train_size)
-        return Dataset.data_generator(X_train, y_train, batch_size=batch_size), Dataset.data_generator(X_val, y_val, batch_size=val_batch_size)
-
+        return Dataset.data_generator(X_train, y_train, batch_size=batch_size), Dataset.data_generator(
+            X_val, y_val, batch_size=val_batch_size)
 
     def get_cv_generators(self, batch_size=32, folds=5, val_batch_size=None, train_size=None):
         """
@@ -77,6 +76,7 @@ class Dataset:
             val_batch_size=len(self)
         step_size = len(self)//folds
         points=[0+i*step_size for i in range(folds)]
+
         def cv_generator():
             for i in range(folds):
                 start = points[i]
@@ -94,13 +94,10 @@ class Dataset:
         return cv_generator()
 
 
-
-
 def get_dataset(name):
     assert name in ["ProPublica COMPAS", "COMPAS"]
     if name in ["ProPublica COMPAS", "COMPAS"]:
         return get_compas()
-
 
 
 def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=None, auto_detect_date=True, numerical_to_float=True, below_threshold_other=0.95, few_unique_to_cat=10, drop_na_col_perc=0.4, dropna=True):
@@ -142,7 +139,6 @@ def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=N
             if trigger:
                 data[col] = data[col].astype("category")
 
-
     if numerical_to_float:
         num_cols = list(data.select_dtypes(include=[np.number]).columns.values)
         for col in num_cols:
@@ -154,8 +150,10 @@ def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=N
     if dropna:
         data.dropna(inplace=True)
 
+
 def get_compas():
-    data = get_csv_from_url("https://raw.githubusercontent.com/propublica/compas-analysis/master/compas-scores-two-years.csv")
+    data = get_csv_from_url("https://raw.githubusercontent.com/propublica/"
+                            "compas-analysis/master/compas-scores-two-years.csv")
     drop_cols = ["id", "name", "first", "last"]
     preprocess(data, drop_cols=drop_cols)
     d = Dataset(name="COMPAS", data=data, target_col="two_year_recid", protected_col="race")
