@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from dateutil import parser as date_parser
 from dj_utils.utils import safe_mkdir
+from sklearn.preprocessing import LabelEncoder
 
 data_dir = "data/"
 safe_mkdir(data_dir)
@@ -13,14 +14,24 @@ def get_csv_from_url(url, names=None, delimiter=","):
 
 
 class Dataset:
-    def __init__(self, name, data, target_col, protected_col=None):
+    def __init__(self, name, data, target_col, protected_col=None, encoding=None):
+        """
+
+        :param name:
+        :param data:
+        :param target_col:
+        :param protected_col:
+        :param encoding: None or a dictionary of (col_name: fit encoding sklearn class)
+        """
         self.name = name
-        self.data=data
-        self.target_col=target_col
-        self.protected_col=protected_col
+        self.data = data
+        self.target_col = target_col
+        self.protected_col = protected_col
         self.X_func = lambda x: self.data.drop(self.target_col, axis=1)
         self.y_func = lambda y: self.data[self.target_col]
         self.length = len(self.data)
+        self.encoding = encoding
+        self.encode_cats()
 
     def get_protected_col(self):
         return self.protected_col
@@ -33,6 +44,32 @@ class Dataset:
 
     def __getitem__(self, i):
         return self.X_func(None).iloc[i], self.y_func(None).iloc[i]
+
+    def encode_cats(self):
+        if self.encoding is None:
+            self.encoding = {}
+        cat_cols = set(self.data.select_dtypes(include=["category"]).columns.values).union(set(self.encoding.keys()))
+        for cat_col in cat_cols:
+            if cat_col not in self.encoding:
+                le = LabelEncoder()
+                self.data[cat_col] = le.fit_transform(self.data[cat_col])
+                self.encoding[cat_col] = le
+            else:
+                encoder = self.encoding[cat_col]
+                self.data[cat_col] = encoder.transform(self.data[cat_col])
+
+    def decode_cats(self, subset=None):
+        if self.encoding is None:
+            return
+        for cat_col in self.encoding:
+            if subset is None or cat_col in subset:
+                self.data[cat_col] = self.encoding[cat_col].inverse_transform(self.data[cat_col])
+
+    def get_decoded_col(self, arr, col):
+        if col in self.encoding:
+            return self.encoding[col].inverse_transform(arr)
+        else:
+            raise ValueError
 
     def get_split_data(self, train_size=0.8):
         assert 0.01 < train_size < 0.99
@@ -49,16 +86,16 @@ class Dataset:
             yield X[i:i+batch_size], y[i:i+batch_size]
             i += batch_size
 
-    def get_simple_generators(self, train_size=0.8, batch_size=32, val_batch_size=None):
+    def get_simple_generators(self, train_size=0.8, batch_size=None, val_batch_size=None):
+        if batch_size is None:
+            batch_size = len(self)
         if val_batch_size is None:
-            val_batch_size=batch_size
-        elif val_batch_size == -1:
-            val_batch_size=len(self)
+            val_batch_size = len(self)
         X_train, y_train, X_val, y_val = self.get_split_data(train_size=train_size)
         return Dataset.data_generator(X_train, y_train, batch_size=batch_size), Dataset.data_generator(
             X_val, y_val, batch_size=val_batch_size)
 
-    def get_cv_generators(self, batch_size=32, folds=5, val_batch_size=None, train_size=None):
+    def get_cv_generators(self, batch_size=None, folds=5, val_batch_size=None, train_size=None):
         """
         Will return a generator object cv_generator
         cv_generator yeilds a generator train_gen and generator val_gen every loop
@@ -70,26 +107,26 @@ class Dataset:
         if train_size is not None:
             assert 0.1 < train_size < 0.9 # I'm assuming folds > 10 will kill the system
             folds = int(1/(1-train_size))
+        if batch_size is None:
+            batch_size = len(self)
         if val_batch_size is None:
-            val_batch_size=batch_size
-        elif val_batch_size == -1:
-            val_batch_size=len(self)
+            val_batch_size = len(self)
         step_size = len(self)//folds
-        points=[0+i*step_size for i in range(folds)]
+        points = [0+i*step_size for i in range(folds)]
 
         def cv_generator():
             for i in range(folds):
                 start = points[i]
                 if i == folds-1:
-                    end = None
+                    end = len(self.data)
                 else:
                     end = points[i+1]
                 val_data = self.data[start:end]
-                train_data = self.data.drop(index=range(start, stop))
+                train_data = self.data.drop(index=range(start, end))
+                X_train = train_data.drop(self.target_col, axis=1)
                 y_train = train_data[self.target_col]
-                train_data.drop(self.target_col, axis=1, inplace=True)
+                X_val = train_data.drop(self.target_col, axis=1)
                 y_val = val_data[self.target_col]
-                val_data.drop(self.target_col, axis=1)
                 yield Dataset.data_generator(X_train, y_train, batch_size=batch_size), Dataset.data_generator(X_val, y_val, batch_size=val_batch_size)
         return cv_generator()
 
