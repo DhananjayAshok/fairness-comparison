@@ -33,12 +33,6 @@ class Dataset:
         self.encoding = encoding
         self.encode_cats()
 
-    def get_protected_col(self):
-        return self.protected_col
-
-    def set_protected_col(self, new_protected_col):
-        self.protected_col = new_protected_col
-
     def __len__(self):
         return self.length
 
@@ -125,7 +119,7 @@ class Dataset:
                 train_data = self.data.drop(index=range(start, end))
                 X_train = train_data.drop(self.target_col, axis=1)
                 y_train = train_data[self.target_col]
-                X_val = train_data.drop(self.target_col, axis=1)
+                X_val = val_data.drop(self.target_col, axis=1)
                 y_val = val_data[self.target_col]
                 yield Dataset.data_generator(X_train, y_train, batch_size=batch_size), Dataset.data_generator(X_val, y_val, batch_size=val_batch_size)
         return cv_generator()
