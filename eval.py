@@ -2,6 +2,7 @@ import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import numpy as np
 
 
 class Evaluator:
@@ -42,9 +43,9 @@ class Evaluator:
         val = self.trajectories[name]['metric'](y_true, y_pred)
         self.direct_update_metric(val, name, model_name, k=k)
 
-    def update_fairness_metric(self, X, y, pred, name, model_name, k=None):
+    def update_fairness_metric(self, X, y, pred, name, model_name, k=None, model=None):
         assert name in self.trajectories
-        val = self.trajectories[name]['metric'](self.dataset, X, y, pred)
+        val = self.trajectories[name]['metric'](self.dataset, X, y, pred, model=model)
         self.direct_update_metric(val, name, model_name, k=k)
 
     def direct_update_metric(self, val, name, model_name, k=None):
@@ -225,26 +226,47 @@ class FairnessMetrics:
         return aggregator(group_comparisons)
 
     @staticmethod
-    def positive_parity(dataset, X, y, pred, comparator="div", aggregator="max"):
+    def positive_parity(dataset, X, y, pred, comparator="div", aggregator="max", model=None):
         return FairnessMetrics.group_metric(FairnessMetrics.positive_probability, dataset, X, y, pred, comparator=comparator,
                                             aggregator=aggregator)
 
     @staticmethod
-    def recall_parity(dataset, X, y, pred, comparator="div", aggregator="max"):
+    def recall_parity(dataset, X, y, pred, comparator="div", aggregator="max", model=None):
         return FairnessMetrics.group_metric(FairnessMetrics.recall, dataset, X, y, pred, comparator=comparator,
                                             aggregator=aggregator)
 
     @staticmethod
-    def accuracy_parity(dataset, X, y, pred, comparator="diff", aggregator="max"):
+    def accuracy_parity(dataset, X, y, pred, comparator="diff", aggregator="max", model=None):
         return FairnessMetrics.group_metric(FairnessMetrics.accuracy, dataset, X, y, pred, comparator=comparator,
                                             aggregator=aggregator)
 
     @staticmethod
-    def precision_parity(dataset, X, y, pred, comparator="diff", aggregator="max"):
+    def precision_parity(dataset, X, y, pred, comparator="diff", aggregator="max", model=None):
         return FairnessMetrics.group_metric(FairnessMetrics.precision, dataset, X, y, pred, comparator=comparator,
                                             aggregator=aggregator)
 
     @staticmethod
-    def tnr_parity(dataset, X, y, pred, comparator="diff", aggregator="max"):
+    def tnr_parity(dataset, X, y, pred, comparator="diff", aggregator="max", model=None):
         return FairnessMetrics.group_metric(FairnessMetrics.tnr, dataset, X, y, pred, comparator=comparator,
                                             aggregator=aggregator)
+
+    @staticmethod
+    def class_change(x, options):
+        options = options.copy()
+        options.remove(x)
+        return np.random.choice(options)
+
+    @staticmethod
+    def counter_factual_invariance(dataset, X, y, pred, aggregator="min", model=None):
+        assert model is not None
+        aggregator = FairnessMetrics.get_aggregator(aggregator)
+        n_classes_approx = y.nunique()
+        options = X[dataset.protected_col].unique().tolist()
+        counter_factual_equalities = []
+        for n in range(n_classes_approx):
+            cf = X.copy()
+            cf[dataset.protected_col] = cf[dataset.protected_col].apply(lambda x: FairnessMetrics.class_change(x, options))
+            cf_pred = model.predict(cf)
+            eq = metrics.accuracy_score(pred, cf_pred)
+            counter_factual_equalities.append(eq)
+        return aggregator(counter_factual_equalities)
