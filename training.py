@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 
 dataset = get_dataset("adults")
-models = [RidgeClassifier, RandomForestClassifier , SVC,  NearestCentroid, MLPClassifier, GaussianNB, XGBClassifier]
+models = [RidgeClassifier, RandomForestClassifier, SVC, MLPClassifier, GaussianNB, XGBClassifier]
 evaluator = Evaluator(dataset)
 tacc = "Training Accuracy"
 vacc = "Validation Accuracy"
@@ -28,7 +28,7 @@ for model_class in tqdm(models):
     evaluator.track_metric(recall, FairnessMetrics.recall_parity, model_name=model_name)
 
     folds = dataset.get_cv_generators(folds=5)
-    for fold, gens in tqdm(enumerate(folds)):
+    for fold, gens in tqdm(enumerate(folds), leave=False):
         train_gen, val_gen = gens
         model = model_class()
         X_train, y_train = next(train_gen)
