@@ -14,26 +14,27 @@ from dj_utils.utils import pbar
 from tqdm import tqdm
 
 
-dataset = get_dataset("adults")
-models = [RidgeClassifier, RandomForestClassifier]#, SVC, MLPClassifier, GaussianNB, XGBClassifier]
-evaluator = Evaluator(dataset)
-tacc = "Training Accuracy"
-vacc = "Validation Accuracy"
-recall = "Validation Recall Parity"
-counterfactual = "Counterfactual Invariance"
-n_folds = 5
+datasets = ["hmda", "german", "adults", "compas"]
 
+for dataset in datasets:
+    dataset = get_dataset(dataset)
+    models = [RidgeClassifier, RandomForestClassifier, SVC, MLPClassifier, GaussianNB, XGBClassifier]
+    evaluator = Evaluator(dataset)
+    tacc = "Training Accuracy"
+    vacc = "Validation Accuracy"
+    recall = "Validation Recall Parity"
+    counterfactual = "Counterfactual Invariance"
+    n_folds = 5
 
-with tqdm(total=len(models)) as model_bar:
-    for model_class in models:
-        model_name = model_class.__name__
-        evaluator.track_metric(tacc, accuracy_score, model_name=model_name)
-        evaluator.track_metric(vacc, accuracy_score, model_name=model_name)
-        evaluator.track_metric(recall, FairnessMetrics.recall_parity, model_name=model_name)
-        evaluator.track_metric(counterfactual, FairnessMetrics.counter_factual_invariance, model_name=model_name)
+    with tqdm(total=len(models)) as model_bar:
+        for model_class in models:
+            model_name = model_class.__name__
+            evaluator.track_metric(tacc, accuracy_score, model_name=model_name)
+            evaluator.track_metric(vacc, accuracy_score, model_name=model_name)
+            evaluator.track_metric(recall, FairnessMetrics.recall_parity, model_name=model_name)
+            evaluator.track_metric(counterfactual, FairnessMetrics.counter_factual_invariance, model_name=model_name)
 
-        folds = dataset.get_cv_generators(folds=n_folds)
-        with tqdm(total=n_folds) as foldbar:
+            folds = dataset.get_cv_generators(folds=n_folds)
             for fold, gens in enumerate(folds):
                 train_gen, val_gen = gens
                 model = model_class()
@@ -47,14 +48,13 @@ with tqdm(total=len(models)) as model_bar:
                 evaluator.update_fairness_metric(X_v, y_v, pred_v, name=recall, model_name=model_name, k=fold)
                 evaluator.update_fairness_metric(X_v, y_v, pred_v, name=counterfactual, model_name=model_name, k=fold,
                                                  model=model)
-                foldbar.update()
-        del folds
-        model_bar.update()
+            del folds
+            model_bar.update()
 
-evaluator.summarize_metrics()
-evaluator.plot_metric_final(tacc)
-evaluator.plot_metric_final(vacc)
-evaluator.plot_metric_final(recall)
-evaluator.plot_metric_final(counterfactual)
-evaluator.plot_metrics_final(vacc, recall)
-evaluator.plot_metrics_final(vacc, counterfactual)
+    evaluator.summarize_metrics()
+    evaluator.plot_metric_final(tacc)
+    evaluator.plot_metric_final(vacc)
+    evaluator.plot_metric_final(recall)
+    evaluator.plot_metric_final(counterfactual)
+    evaluator.plot_metrics_final(vacc, recall)
+    evaluator.plot_metrics_final(vacc, counterfactual)

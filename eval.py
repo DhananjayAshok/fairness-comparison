@@ -45,7 +45,7 @@ class Evaluator:
 
     def update_fairness_metric(self, X, y, pred, name, model_name, k=None, model=None):
         assert name in self.trajectories
-        val = self.trajectories[name]['metric'](self.dataset, X, y, pred, model=model)
+        val = self.trajectories[name]['metric'](self.dataset.protected_col, X, y, pred, model=model)
         self.direct_update_metric(val, name, model_name, k=k)
 
     def direct_update_metric(self, val, name, model_name, k=None):
@@ -152,7 +152,7 @@ class FairnessMetrics:
     @staticmethod
     def safe_div(x, y):
         if y == 0:
-            return None
+            return 0
         else:
             return x / y
 
@@ -202,8 +202,7 @@ class FairnessMetrics:
         return metrics.accuracy_score(y, pred)
 
     @staticmethod
-    def group_metric(eval_fn, dataset, X, y, pred, comparator="div", aggregator="max"):
-        protected_col = dataset.protected_col
+    def group_metric(eval_fn, protected_col, X, y, pred, comparator="div", aggregator="max"):
         comparator = FairnessMetrics.get_comparator(comparator)
         aggregator = FairnessMetrics.get_aggregator(aggregator)
         group_values = []
@@ -226,28 +225,28 @@ class FairnessMetrics:
         return aggregator(group_comparisons)
 
     @staticmethod
-    def positive_parity(dataset, X, y, pred, comparator="div", aggregator="max", model=None):
-        return FairnessMetrics.group_metric(FairnessMetrics.positive_probability, dataset, X, y, pred, comparator=comparator,
+    def positive_parity(protected_col, X, y, pred, comparator="div", aggregator="max", model=None):
+        return FairnessMetrics.group_metric(FairnessMetrics.positive_probability, protected_col, X, y, pred, comparator=comparator,
                                             aggregator=aggregator)
 
     @staticmethod
-    def recall_parity(dataset, X, y, pred, comparator="div", aggregator="max", model=None):
-        return FairnessMetrics.group_metric(FairnessMetrics.recall, dataset, X, y, pred, comparator=comparator,
+    def recall_parity(protected_col, X, y, pred, comparator="div", aggregator="max", model=None):
+        return FairnessMetrics.group_metric(FairnessMetrics.recall, protected_col, X, y, pred, comparator=comparator,
                                             aggregator=aggregator)
 
     @staticmethod
-    def accuracy_parity(dataset, X, y, pred, comparator="diff", aggregator="max", model=None):
-        return FairnessMetrics.group_metric(FairnessMetrics.accuracy, dataset, X, y, pred, comparator=comparator,
+    def accuracy_parity(protected_col, X, y, pred, comparator="diff", aggregator="max", model=None):
+        return FairnessMetrics.group_metric(FairnessMetrics.accuracy, protected_col, X, y, pred, comparator=comparator,
                                             aggregator=aggregator)
 
     @staticmethod
-    def precision_parity(dataset, X, y, pred, comparator="diff", aggregator="max", model=None):
-        return FairnessMetrics.group_metric(FairnessMetrics.precision, dataset, X, y, pred, comparator=comparator,
+    def precision_parity(protected_col, X, y, pred, comparator="diff", aggregator="max", model=None):
+        return FairnessMetrics.group_metric(FairnessMetrics.precision, protected_col, X, y, pred, comparator=comparator,
                                             aggregator=aggregator)
 
     @staticmethod
-    def tnr_parity(dataset, X, y, pred, comparator="diff", aggregator="max", model=None):
-        return FairnessMetrics.group_metric(FairnessMetrics.tnr, dataset, X, y, pred, comparator=comparator,
+    def tnr_parity(protected_col, X, y, pred, comparator="diff", aggregator="max", model=None):
+        return FairnessMetrics.group_metric(FairnessMetrics.tnr, protected_col, X, y, pred, comparator=comparator,
                                             aggregator=aggregator)
 
     @staticmethod
@@ -257,16 +256,28 @@ class FairnessMetrics:
         return np.random.choice(options)
 
     @staticmethod
-    def counter_factual_invariance(dataset, X, y, pred, aggregator="min", model=None):
+    def counter_factual_invariance(protected_col, X, y, pred, aggregator="min", model=None):
         assert model is not None
         aggregator = FairnessMetrics.get_aggregator(aggregator)
         n_classes_approx = y.nunique()
-        options = X[dataset.protected_col].unique().tolist()
+        options = X[protected_col].unique().tolist()
         counter_factual_equalities = []
         for n in range(n_classes_approx):
             cf = X.copy()
-            cf[dataset.protected_col] = cf[dataset.protected_col].apply(lambda x: FairnessMetrics.class_change(x, options))
+            cf[protected_col] = cf[protected_col].apply(lambda x: FairnessMetrics.class_change(x, options))
             cf_pred = model.predict(cf)
             eq = metrics.accuracy_score(pred, cf_pred)
             counter_factual_equalities.append(eq)
         return aggregator(counter_factual_equalities)
+
+    @staticmethod
+    def decoupled_regularization_loss(protected_col, X, y, pred, aggregator="sum", model=None):
+        p_all = pred.mean()
+        groups = X[protected_col].unique()
+        group_losses = []
+        for group in groups:
+            idx = X[protected_col] == group
+            p_k = pred[idx].mean()
+            group_losses.append((p_k - p_all).abs())
+        return aggregator(group_losses)
+

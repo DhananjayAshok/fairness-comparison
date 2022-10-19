@@ -116,7 +116,7 @@ class Dataset:
                 else:
                     end = points[i+1]
                 val_data = self.data[start:end]
-                train_data = self.data.drop(index=range(start, end))
+                train_data = self.data.drop(index=range(start, end), axis=0)
                 X_train = train_data.drop(self.target_col, axis=1)
                 y_train = train_data[self.target_col]
                 X_val = val_data.drop(self.target_col, axis=1)
@@ -137,9 +137,33 @@ def get_dataset(name):
         return get_hmda()
 
 
-def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=None, auto_detect_date=True, numerical_to_float=True, below_threshold_other=0.95, few_unique_to_cat=10, drop_na_col_perc=0.4, dropna=True):
+def isint(s):
+    int_types = [int, np.int32, np.int64]
+    return all([type(i) in int_types for i in s])
+
+
+def get_date_detail(x, detail="day"):
+    if hasattr(x, "year"):
+        if detail == "day":
+            return x.day
+        elif detail == "month":
+            return x.month
+        elif detail == "year":
+            return x.year
+        return x.year
+    else:
+        return np.nan
+
+
+def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=None, auto_detect_date=True, featurize_date=True, numerical_to_float=True, below_threshold_other=0.95, few_unique_to_cat=10, drop_na_col_perc=0.4, dropna=True):
     if drop_cols is not None:
         data.drop(drop_cols, axis=1, inplace=True)
+    nas = data.isna().mean()
+    for col in data:
+        if nas[col] >= drop_na_col_perc:
+            data.drop(col, axis=1, inplace=True)
+    if dropna:
+        data.dropna(inplace=True)
     if date_cols is not None:
         for date_col in date_cols:
             data[date_col] = pd.to_datetime(data[date_col])
@@ -150,6 +174,13 @@ def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=N
                 data[col] = data[col].map(date_parser.parse)
             except:
                 pass
+    if featurize_date:
+        cols = list(data.select_dtypes(include=["datetime64[ns]"]).columns.values)
+        for col in cols:
+            for detail in ["year", "day", "month"]:
+                data[f"{col}_{detail}"] = data[col].map(lambda x: get_date_detail(x, detail=detail)).astype(int)
+            data.drop(col, axis=1, inplace=True)
+
     if cat_cols is not None:
         for cat_col in cat_cols:
             data[cat_col] = data[cat_col].astype("category")
@@ -171,7 +202,10 @@ def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=N
                     top_density += percs[i]
                 else:
                     data[col] = data[col].astype("object")
-                    data[col][data[col] == percs.index[i]] = "UNLIKELYCAT"
+                    if isint(data[col]):
+                        data[col][data[col] == percs.index[i]] = -100
+                    else:
+                        data[col][data[col] == percs.index[i]] = "UNLIKELYCAT"
                     trigger = True
             if trigger:
                 data[col] = data[col].astype("category")
@@ -180,19 +214,15 @@ def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=N
         num_cols = list(data.select_dtypes(include=[np.number]).columns.values)
         for col in num_cols:
             data[col] = data[col].astype("float32")
-    nas = data.isna().mean()
-    for col in data:
-        if nas[col] >= drop_na_col_perc:
-            data.drop(col, axis=1, inplace=True)
-    if dropna:
-        data.dropna(inplace=True)
+    data.reset_index(drop=True, inplace=True)
 
 
 def get_compas():
     data = get_csv_from_url("https://raw.githubusercontent.com/propublica/"
                             "compas-analysis/master/compas-scores-two-years.csv")
     drop_cols = ["id", "name", "first", "last", "c_case_number"]
-    preprocess(data, drop_cols=drop_cols)
+    date_cols = ["c_offense_date"]
+    preprocess(data, drop_cols=drop_cols, date_cols=date_cols)
     d = Dataset(name="COMPAS", data=data, target_col="two_year_recid", protected_col="race")
     return d
 
@@ -203,7 +233,6 @@ def get_adults():
     data = get_csv_from_url("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data", names=names)
     drop_cols = []
     preprocess(data, drop_cols=drop_cols)
-    print(data.columns)
     d = Dataset(name="Adults", data=data, target_col="target", protected_col="race")
     return d
 
@@ -211,19 +240,20 @@ def get_adults():
 def get_german():
     names = ["c_status", "duration", "c_history", "purpose", "credit_amnt", "savings_account/bonds", "employment_since",
              "installment_rate", "personal_status", "other_debtors", "residence_since", "property", "age",
-             "other_plans", "hosuing", "ncredits", "job", "ndependants", "telephone", "foreign", "target"]
+             "other_plans", "housing", "ncredits", "job", "ndependants", "telephone", "foreign", "target"]
     data = get_csv_from_url("https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data",
                             names=names, delimiter=" ")
     drop_cols = []
     preprocess(data, drop_cols=drop_cols)
-    d = Dataset(name="Adults", data=data, target_col="target", protected_col="race")
+    d = Dataset(name="Adults", data=data, target_col="target", protected_col="foreign")
     return d
 
 
 def get_hmda():
     data = pd.read_csv(data_dir+"/ny_hmda_2015.csv")
-    filter1 = (data['action_taken'] >= 1) & (data['action_taken'] <= 3)
-    data = data[filter1]
+    data = data.sample(frac=1).reset_index(drop=True)
+    index = data['action_taken'] != 1
+    data['action_taken'][index] = 0
     drop_cols = ["action_taken_name", "agency_name", "state_name", "applicant_race_1"]
     preprocess(data, drop_cols=drop_cols)
     d = Dataset(name="HMDA", data=data, target_col="action_taken", protected_col="applicant_race_name_1")
