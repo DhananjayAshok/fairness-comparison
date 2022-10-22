@@ -38,12 +38,12 @@ class ParetoFront(AdjustmentModel):
         assert not metric_higher_is_better and metric_one_optimal
         # We will assume higher is better for self.metric_fn
         if metric_one_optimal:
-            self.metric_fn = lambda X, y, pred: -(metric(protected_col, X, y, pred)-1).abs()
+            self.metric_fn = lambda X, y, pred: -1 * abs(metric(protected_col, X, y, pred)-1)
         else:
             if metric_higher_is_better:
                 self.metric_fn = lambda X, y, pred: metric(protected_col, X, y)
             else:
-                self.metric_fn = lambda X, y, pred: -metric(protected_col, X, y)
+                self.metric_fn = lambda X, y, pred: -1 * metric(protected_col, X, y)
 
     def fit(self, X, y):
         models = []
@@ -122,8 +122,8 @@ class RegularizedSelection(AdjustmentModel):
 
 class DecoupledClassifier(AdjustmentModel):
     def __init__(self, protected_col, name="Decoupled",  model_classes=[RidgeClassifier, GaussianNB,
-                                     XGBClassifier], lambd=0.2, reg=FairnessMetrics.decoupled_regularization_loss,
-                 reg_higher_worse=True):
+                                                                        XGBClassifier], lambd=0.2,
+                 reg=FairnessMetrics.decoupled_regularization_loss, reg_higher_worse=True):
         AdjustmentModel.__init__(self, name, protected_col)
         self.model_classes = model_classes
         self.lambd = lambd

@@ -215,6 +215,8 @@ def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=N
         for col in num_cols:
             data[col] = data[col].astype("float32")
     data.reset_index(drop=True, inplace=True)
+    if "index" in data.columns:
+        data.drop("index", inplace=True, axis=1)
 
 
 def get_compas():
