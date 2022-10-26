@@ -99,14 +99,17 @@ class Evaluator:
 
     def save(self, path):
         for name in self.trajectories:
-            self.trajectories[name].to_csv(os.path.join(path, f"{name}.csv"))
+            self.trajectories[name].to_csv(os.path.join(path, f"{name}.csv"), index=False)
 
     def load(self, path):
         self.trajectories = {}
         names = os.listdir(path)
         for name in names:
             # .csv excluded so -4
-            self.trajectories[name[:-4]] = pd.read_csv(os.path.join(path, name))
+            df = pd.read_csv(os.path.join(path, name))
+            if 'Unnamed: 0' in df:
+                df.drop('Unnamed: 0', axis=1, inplace=True)
+            self.trajectories[name[:-4]] = df
 
     def select_model_subset_df(self, name, model_subset):
         assert name in self.trajectories
@@ -302,8 +305,18 @@ class FairnessMetrics:
         return aggregator(group_losses)
 
 
-def get_top_models(evaluator, metric, k=10):
+def get_top_models(evaluator, metric, k=10, descending=True, one_optimal=False):
+    """
+
+    :param evaluator:
+    :param metric:
+    :param k:
+    :param descending:
+    :param one_optimal: if One Optimal is True then disregard descending flag
+    :return:
+    """
     df = evaluator.trajectories[metric]
+
 
 
 
