@@ -124,10 +124,25 @@ class RegularizedSelection(AdjustmentModel):
     def __init__(self, protected_col, name=f"Regularized_Selection", models=ModelSets.all_simple, lambd=0.8,
                  metric=FairnessMetrics.recall_parity, metric_one_optimal=True,
                  metric_higher_is_better=False):
+        """
+
+        :param protected_col:
+        :param name:
+        :param models:
+        :param lambd: Can also be a list, if its a list then we will do a procedure for each lambda and save the res.
+                    : unless specified explitly predictions are from the first lambda in the list.
+        :param metric:
+        :param metric_one_optimal:
+        :param metric_higher_is_better:
+        """
         AdjustmentModel.__init__(self, name, protected_col)
         self.models = models
-        self.lambd = lambd
-        self.model = None
+        self.lambds = lambd
+        if type(lambd) != list:
+            self.lambds = [lambd]
+        else:
+            self.lambds = lambd
+        self.model_dict = {}
         assert not metric_higher_is_better and metric_one_optimal
         # We will assume higher is better for self.metric_fn
         if metric_one_optimal:
@@ -138,24 +153,36 @@ class RegularizedSelection(AdjustmentModel):
             else:
                 self.metric_fn = lambda X, y, pred: -metric(protected_col, X, y)
 
-    def loss_fn(self, X, y, pred):
-        return -(self.lambd*(FairnessMetrics.accuracy(X, y, pred) + (1-self.lambd) * (self.metric_fn(X, y, pred))))
+    def loss_fn(self, X, y, pred, lambd):
+        return -(lambd*(FairnessMetrics.accuracy(X, y, pred) + (1-lambd) * (self.metric_fn(X, y, pred))))
 
     def fit(self, X, y):
-        best_loss = np.inf
-        best_model = None
+        fitted_models = []
+        model_preds = []
         for model in self.models:
-            fitted_model = model.fit(X, y)
-            pred = fitted_model.predict(X)
-            loss = self.loss_fn(X, y, pred)
-            if loss < best_loss:
-                best_model = fitted_model
-                best_loss = loss
-        self.model = best_model
-        self.name = f"{self.name}_{self.model.__class__.__name__}"
+            fitted_model.append(model.fit(X, y))
+            model_preds.append(model.predict(X))
 
-    def predict(self, X):
-        return self.model.predict(X)
+        for lambd in self.lambds:
+            best_loss = np.inf
+            best_model = None
+            for i, fitted_model in enumerate(fitted_models):
+                pred = model_preds[i]
+                loss = self.loss_fn(X, y, pred, lambd)
+                if loss < best_loss:
+                    best_model = fitted_model
+                    best_loss = loss
+            self.model_dict[lambd] = best_model
+
+    def get_model(self, lambd=None):
+        if lambd is None or lambd not in self.model_dict:
+            lambd = list(self.model_dict.keys())[0]
+        model = self.model_dict[lambd]
+        return model
+
+    def predict(self, X, lambd=None):
+        model = self.get_model(lambd)
+        return model.predict(X)
 
 
 class DecoupledClassifier(AdjustmentModel):
@@ -213,7 +240,7 @@ class DecoupledClassifier(AdjustmentModel):
 
 
 class RecallParityThreshold(AdjustmentModel):
-    def __init__(self, protected_col,  model, name="Threshold", delta=0.05):
+    def __init__(self, protected_col,  model, name="RPT", delta=0.05):
         AdjustmentModel.__init__(self, protected_col=protected_col, name=name)
         self.model = model # Model should be instantiated not class
         self.delta = delta
