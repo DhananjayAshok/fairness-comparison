@@ -187,7 +187,7 @@ class Evaluator:
         plt.show()
         return
 
-    def plot_metric_final(self, name, model_subset=None):
+    def plot_metric_final(self, name, model_subset=None, use_base_model=False):
         epoch_string = Evaluator.get_epoch_string()
         df = None
         if self.df is None:
@@ -195,13 +195,16 @@ class Evaluator:
             df = self.select_model_subset_df(name, model_subset)
         else:
             df = self.df
+        df = df.copy()
+        if use_base_model:
+            df["Model"] = df["Model"].apply(Evaluator.get_base_model)
         last_epoch = df[epoch_string].max()
         last_only = df[df[epoch_string] == last_epoch]
         sns.boxplot(data=last_only, x="Model", y=name)
         plt.show()
         return
 
-    def plot_metrics_final(self, name_0, name_1, model_subset=None, fold_epoch_switch=True):
+    def plot_metrics_final(self, name_0, name_1, model_subset=None, use_base_model=False):
         epoch_string = Evaluator.get_epoch_string()
         df = None
         if self.df is None:
@@ -210,6 +213,9 @@ class Evaluator:
             df = self.select_model_subset_df_multi([name_0, name_1], model_subset=model_subset)
         else:
             df = self.df
+        df = df.copy()
+        if use_base_model:
+            df["Model"] = df["Model"].apply(Evaluator.get_base_model)
         last_epoch = df[epoch_string].max()
         last_only = df[df[epoch_string] == last_epoch]
         sns.scatterplot(data=last_only, x=name_0, y=name_1, hue="Model", style="Model")
