@@ -263,7 +263,7 @@ def get_hmda():
     data = pd.read_csv(data_dir+"/ny_hmda_2015.csv")
     data = data.sample(frac=1).reset_index(drop=True)
     index = data['action_taken'] != 1
-    data['action_taken'][index] = 0
+    data.loc[index, 'action_taken'] = 0
     drop_cols = ["action_taken_name", "agency_name", "state_name", "applicant_race_1"]
     preprocess(data, drop_cols=drop_cols)
     data["applicant_race_name_1"] = (data["applicant_race_name_1"] == "White").astype(int)

@@ -71,7 +71,7 @@ for dataset in datasets:
 
     evaluator.summarize_metrics()
     safe_mkdir(f"results/{dataset.name}")
-    evaluator.save(f"results/{dataset.name}")
+    evaluator.save(f"results/")
     #evaluator.plot_metric_final(tacc)
     #evaluator.plot_metric_final(vacc)
     #evaluator.plot_metric_final(recall)
