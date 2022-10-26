@@ -13,6 +13,7 @@ accuracy = "Validation Accuracy Parity"
 tnr = "Validation TNR Parity"
 counterfactual = "Validation Counterfactual Invariance"
 
+
 class Evaluator:
     def __init__(self, dataset):
         self.dataset = dataset
@@ -97,6 +98,8 @@ class Evaluator:
     def summarize_metrics(self, join=True):
         for name in self.trajectories:
             self.summarize_metric(name)
+        if join:
+            self.join_trajectories()
 
     def join_trajectories(self):
         if self.df is None:
