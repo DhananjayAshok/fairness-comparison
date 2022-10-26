@@ -2,8 +2,16 @@ import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import os
 import numpy as np
 
+tacc = "Training Accuracy"
+vacc = "Validation Accuracy"
+recall = "Validation Recall Parity"
+positive_rate = "Validation Positive Parity"
+accuracy = "Validation Accuracy Parity"
+tnr = "Validation TNR Parity"
+counterfactual = "Validation Counterfactual Invariance"
 
 class Evaluator:
     def __init__(self, dataset):
@@ -88,6 +96,17 @@ class Evaluator:
     def summarize_metrics(self):
         for name in self.trajectories:
             self.summarize_metric(name)
+
+    def save(self, path):
+        for name in self.trajectories:
+            self.trajectories[name].to_csv(os.path.join(path, f"{name}.csv"))
+
+    def load(self, path):
+        self.trajectories = {}
+        names = os.listdir(path)
+        for name in names:
+            # .csv excluded so -4
+            self.trajectories[name[:-4]] = pd.read_csv(os.path.join(path, name))
 
     def select_model_subset_df(self, name, model_subset):
         assert name in self.trajectories
@@ -272,12 +291,33 @@ class FairnessMetrics:
 
     @staticmethod
     def decoupled_regularization_loss(protected_col, X, y, pred, aggregator="sum", model=None):
+        aggregator = FairnessMetrics.get_aggregator(aggregator)
         p_all = pred.mean()
         groups = X[protected_col].unique()
         group_losses = []
         for group in groups:
             idx = X[protected_col] == group
             p_k = pred[idx].mean()
-            group_losses.append((p_k - p_all).abs())
+            group_losses.append(abs(p_k - p_all))
         return aggregator(group_losses)
 
+
+def get_top_models(evaluator, metric, k=10):
+    df = evaluator.trajectories[metric]
+
+
+
+
+def get_all_evaluators(datasets=["adults", "compas", "german", "hmda"]):
+    from data import get_dataset
+    res = {}
+    for dataset in datasets:
+        dset = get_dataset(dataset)
+        path = os.path.join(f"results/{dset.name}")
+        evaluator = Evaluator(dataset=dset)
+        evaluator.load(path)
+        res[dataset] = evaluator
+    return res
+
+if __name__ == "__main__":
+    pass

@@ -4,6 +4,7 @@ import pandas as pd
 from dateutil import parser as date_parser
 from dj_utils.utils import safe_mkdir
 from sklearn.preprocessing import LabelEncoder
+from sklearn.decomposition import PCA
 
 data_dir = "data/"
 safe_mkdir(data_dir)
@@ -203,9 +204,9 @@ def preprocess(data, drop_cols=None, date_cols=None, cat_cols=None, float_cols=N
                 else:
                     data[col] = data[col].astype("object")
                     if isint(data[col]):
-                        data[col][data[col] == percs.index[i]] = -100
+                        data.loc[data[col] == percs.index[i], col] = -100
                     else:
-                        data[col][data[col] == percs.index[i]] = "UNLIKELYCAT"
+                        data.loc[data[col] == percs.index[i], col] = "UNLIKELYCAT"
                     trigger = True
             if trigger:
                 data[col] = data[col].astype("category")
@@ -225,6 +226,8 @@ def get_compas():
     drop_cols = ["id", "name", "first", "last", "c_case_number"]
     date_cols = ["c_offense_date"]
     preprocess(data, drop_cols=drop_cols, date_cols=date_cols)
+    data = data[data['race'].isin(['African-American', 'Caucasian'])]
+    data.reset_index(drop=True, inplace=True)
     d = Dataset(name="COMPAS", data=data, target_col="two_year_recid", protected_col="race")
     return d
 
@@ -235,6 +238,8 @@ def get_adults():
     data = get_csv_from_url("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data", names=names)
     drop_cols = []
     preprocess(data, drop_cols=drop_cols)
+    data = data[data["race"] != 'UNLIKELYCAT']
+    data.reset_index(drop=True, inplace=True)
     d = Dataset(name="Adults", data=data, target_col="target", protected_col="race")
     return d
 
@@ -247,7 +252,10 @@ def get_german():
                             names=names, delimiter=" ")
     drop_cols = []
     preprocess(data, drop_cols=drop_cols)
-    d = Dataset(name="Adults", data=data, target_col="target", protected_col="foreign")
+    data["sex"] = data["personal_status"].isin(["A92", "A95"])
+    data.drop("personal_status", axis=1, inplace=True)
+    data.reset_index(drop=True, inplace=True)
+    d = Dataset(name="German", data=data, target_col="target", protected_col="sex")
     return d
 
 
@@ -258,6 +266,22 @@ def get_hmda():
     data['action_taken'][index] = 0
     drop_cols = ["action_taken_name", "agency_name", "state_name", "applicant_race_1"]
     preprocess(data, drop_cols=drop_cols)
+    data["applicant_race_name_1"] = (data["applicant_race_name_1"] == "White").astype(int)
+    data.reset_index(drop=True, inplace=True)
+    d = Dataset(name="HMDA", data=data, target_col="action_taken", protected_col="applicant_race_name_1")
+    data = d.data
+    old_dim = data.shape[1]-2
+    rest_data = data.drop(["action_taken", "applicant_race_name_1"], axis=1)
+    data = data[["action_taken", "applicant_race_name_1"]]
+    new_dim = 7
+    p = PCA(n_components=new_dim).fit(rest_data)
+    print(f"HMDA reduced from {old_dim} to {new_dim} Explained Variance: {sum(p.explained_variance_ratio_)}")
+    p = p.transform(rest_data)
+    for d in range(new_dim):
+        data[f"{d}"] = p[:, d]
+    perc_use = 0.1
+    data = data.sample(frac=perc_use)
+    data.reset_index(drop=True, inplace=True)
     d = Dataset(name="HMDA", data=data, target_col="action_taken", protected_col="applicant_race_name_1")
     # You can get this from: https://www.kaggle.com/datasets/jboysen/ny-home-mortgage
     return d
