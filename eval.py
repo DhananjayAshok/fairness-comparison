@@ -249,6 +249,21 @@ class Evaluator:
         else:
             raise ValueError
 
+    @staticmethod
+    def get_base_model(string):
+        from models import ModelSets
+        phrase_returns = ["Pareto", "Decoupled"]
+        for phrase in phrase_returns:
+            if phrase in string:
+                return phrase
+        for model in ModelSets.all_simple:
+            if model.__class__.__name__ in string:
+                return model.__class__.__name__
+        if "Regularized_Selection" in string:
+            return "Regularized_Selection"
+        else:
+            return "?"
+
     def get_pareto_frontier_indices(self, metrics, optimalities):
         """
         Get the indices of models which are non_dominated by any metric
