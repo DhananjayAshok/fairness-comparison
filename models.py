@@ -191,9 +191,15 @@ class DecoupledClassifier(AdjustmentModel):
     def __init__(self, protected_col, name="Decoupled", models=ModelSets.all_simple, lambd=0.2,
                  reg=FairnessMetrics.decoupled_regularization_loss, reg_higher_worse=True):
         AdjustmentModel.__init__(self, name, protected_col)
+        self.lambds = lambd
+        if type(lambd) != list:
+            self.lambds = [lambd]
+        else:
+            self.lambds = lambd
         self.models = models
-        self.lambd = lambd
         self.group_classifiers = {}
+        for lamb in self.lambds:
+            self.group_classifiers[lamb] = {}
         self.reg = reg
         self.reg_high_worse = reg_higher_worse
 
@@ -209,34 +215,42 @@ class DecoupledClassifier(AdjustmentModel):
             for model in self.models:
                 model_set[group].append(model.fit(group_X, group_y))
         model_lists = [model_set[group] for group in groups]
-        best_loss = np.inf
-        best_group_models = None
         mult = 1
         if not self.reg_high_worse:
             mult = -1
-        for group_models in product(*model_lists):
-            pred = np.zeros_like(y)
+        for lambd in self.lambds:
+            best_loss = np.inf
+            best_group_models = None
+            for group_models in product(*model_lists):
+                pred = np.zeros_like(y)
+                for group in groups:
+                    idx = X[self.protected_col] == group
+                    group_X = X[idx]
+                    group_pred = group_models[group].predict(group_X)
+                    pred[idx] = group_pred
+                loss = lambd * FairnessMetrics.accuracy(X, y, pred) + (1-lambd) * mult * \
+                       self.reg(self.protected_col, X, y, pred)
+                if loss < best_loss:
+                    best_loss = loss
+                    best_group_models = group_models
             for group in groups:
-                idx = X[self.protected_col] == group
-                group_X = X[idx]
-                group_pred = group_models[group].predict(group_X)
-                pred[idx] = group_pred
-            loss = self.lambd * FairnessMetrics.accuracy(X, y, pred) + (1-self.lambd) * mult * \
-                   self.reg(self.protected_col, X, y, pred)
-            if loss < best_loss:
-                best_loss = loss
-                best_group_models = group_models
-        for group in groups:
-            self.group_classifiers[group] = best_group_models[group]
+                self.group_classifiers[lambd][group] = best_group_models[group]
 
-    def predict(self, X):
+    def get_group_classifier(self, lambd=None):
+        if lambd is None or lambd not in self.group_classifiers:
+            lambd = list(self.group_classifiers.keys())[0]
+        group_clf = self.group_classifiers[lambd]
+        return group_clf
+
+    def predict(self, X, lambd=None):
+        group_clf = self.get_group_classifier(lambd)
         pred = np.zeros(len(X))
-        for group in self.group_classifiers:
+        for group in group_clf:
             idx = X[self.protected_col] == group
             group_X = X[idx]
             if len(idx) == 0:
                 continue
-            model = self.group_classifiers[group]
+            model = group_clf[group]
             pred[idx] = model.predict(group_X)
         return pred
 

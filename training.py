@@ -37,9 +37,9 @@ def train_all(datasets=["compas", "german", "adults", "hmda"], save_dir="results
             rs = RegularizedSelection(protected_col=dataset.protected_col, models=rs_ms, lambd=lambds)
             models.append(rs)
         if not skip_dcs:
-            dcs = [DecoupledClassifier(protected_col=dataset.protected_col, name=f"Decoupled_Classifier_{lambd}",
-                                       models=dc_ms, lambd=lambd) for lambd in lambds]
-            models.extend(dcs)
+            dc = DecoupledClassifier(protected_col=dataset.protected_col, name=f"Decoupled_Classifier", models=dc_ms,
+                                     lambd=lambds)
+            models.append(dc)
         if not skip_probas:
             proba_models = []
             for i, model in enumerate(proba_models):
@@ -56,7 +56,7 @@ def train_all(datasets=["compas", "german", "adults", "hmda"], save_dir="results
         with tqdm(total=len(models)) as model_bar:
             for model in models:
                 model_name = model.name
-                if model.name == "Regularized_Selection":
+                if model.name == "Regularized_Selection" or model.name == "Decoupled_Classifier":
                     lambds = model.lambds
                     for lambd in lambds:
                         model_name = f"{model.name}_{lambd}"
@@ -84,7 +84,7 @@ def train_all(datasets=["compas", "german", "adults", "hmda"], save_dir="results
                     X_train, y_train = next(train_gen)
                     X_v, y_v = next(val_gen)
 
-                    if model.name == "Regularized_Selection":
+                    if model.name == "Regularized_Selection" or model.name == "Decoupled_Classifier":
                         model.fit(X_train, y_train)
                         for lambd in model.lambds:
                             pred_train = model.predict(X_train, lambd=lambd)
