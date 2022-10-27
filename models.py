@@ -162,7 +162,7 @@ class RegularizedSelection(AdjustmentModel):
         fitted_models = []
         model_preds = []
         for model in self.models:
-            fitted_model.append(model.fit(X, y))
+            fitted_models.append(model.fit(X, y))
             model_preds.append(model.predict(X))
 
         for lambd in self.lambds:
