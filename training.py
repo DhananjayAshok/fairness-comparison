@@ -97,36 +97,35 @@ def train_all(datasets=["compas", "german", "adults", "hmda"], save_dir="results
                             pred_v = model.predict(X_v, lambd=lambd)
                             model_name = f"{model.name}_{lambd}"
 
-                            evaluator.update_sklearn_metric(y_train, pred_train, tacc, model_name=model_name, k=fold)
-                            evaluator.update_sklearn_metric(y_v, pred_v, vacc, model_name=model_name, k=fold)
-                            evaluator.update_fairness_metric(X_v, y_v, pred_v, name=recall, model_name=model_name, k=fold)
-                            evaluator.update_fairness_metric(X_v, y_v, pred_v, name=positive_rate, model_name=model_name,
-                                                             k=fold)
-                            evaluator.update_fairness_metric(X_v, y_v, pred_v, name=accuracy, model_name=model_name, k=fold)
-                            evaluator.update_fairness_metric(X_v, y_v, pred_v, name=tnr, model_name=model_name, k=fold)
-                            evaluator.update_fairness_metric(X_v, y_v, pred_v, name=counterfactual, model_name=model_name,
-                                                             k=fold, model=model)
+                            evaluator.update_sklearn_metric(y_train, pred_train, tacc, model_name=model_name)
+                            evaluator.update_sklearn_metric(y_v, pred_v, vacc, model_name=model_name)
+                            evaluator.update_fairness_metric(X_v, y_v, pred_v, name=recall, model_name=model_name)
+                            evaluator.update_fairness_metric(X_v, y_v, pred_v, name=positive_rate,
+                                                             model_name=model_name)
+                            evaluator.update_fairness_metric(X_v, y_v, pred_v, name=accuracy, model_name=model_name)
+                            evaluator.update_fairness_metric(X_v, y_v, pred_v, name=tnr, model_name=model_name)
+                            evaluator.update_fairness_metric(X_v, y_v, pred_v, name=counterfactual,
+                                                             model_name=model_name, model=model)
                     else:
                         model.fit(X_train, y_train)
                         pred_train = model.predict(X_train)
                         pred_v = model.predict(X_v)
 
-                        evaluator.update_sklearn_metric(y_train, pred_train, tacc, model_name=model_name, k=fold)
-                        evaluator.update_sklearn_metric(y_v, pred_v, vacc, model_name=model_name, k=fold)
-                        evaluator.update_fairness_metric(X_v, y_v, pred_v, name=recall, model_name=model_name, k=fold)
-                        evaluator.update_fairness_metric(X_v, y_v, pred_v, name=positive_rate, model_name=model_name,
-                                                         k=fold)
-                        evaluator.update_fairness_metric(X_v, y_v, pred_v, name=accuracy, model_name=model_name, k=fold)
-                        evaluator.update_fairness_metric(X_v, y_v, pred_v, name=tnr, model_name=model_name, k=fold)
+                        evaluator.update_sklearn_metric(y_train, pred_train, tacc, model_name=model_name)
+                        evaluator.update_sklearn_metric(y_v, pred_v, vacc, model_name=model_name)
+                        evaluator.update_fairness_metric(X_v, y_v, pred_v, name=recall, model_name=model_name)
+                        evaluator.update_fairness_metric(X_v, y_v, pred_v, name=positive_rate, model_name=model_name)
+                        evaluator.update_fairness_metric(X_v, y_v, pred_v, name=accuracy, model_name=model_name)
+                        evaluator.update_fairness_metric(X_v, y_v, pred_v, name=tnr, model_name=model_name)
                         evaluator.update_fairness_metric(X_v, y_v, pred_v, name=counterfactual, model_name=model_name,
-                                                         k=fold, model=model)
+                                                         model=model)
                 if model.name == "Regularized_Selection" or model.name == "Decoupled_Classifier":
                     model_bar.update(len(lambds))
                 else:
                     model_bar.update()
                 del folds
         evaluator.summarize_metrics(join=True)
-        safe_mkdir(f"{save_dir}/{dataset.name}")
+        safe_mkdir(f"{save_dir}/")
         evaluator.save(f"{save_dir}/")
 
 

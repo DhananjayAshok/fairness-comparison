@@ -17,7 +17,7 @@ counterfactual = "Validation Counterfactual Invariance"
 class Evaluator:
     def __init__(self, dataset):
         self.dataset = dataset
-        self.trajectories = {}
+        self.fold_results = {}
         self.df = None
 
     def track_metric(self, name, metric_fn, model_name=None):
@@ -28,98 +28,78 @@ class Evaluator:
         :param metric_fn: takes in y_true, y_pre
         :return:
         """
-        if name in self.trajectories:
+        if name in self.fold_results:
             assert model_name is not None
-            self.trajectories[name][model_name] = []
-            assert metric_fn == self.trajectories[name]['metric']
+            self.fold_results[name][model_name] = []
+            assert metric_fn == self.fold_results[name]['metric']
         else:
             if model_name is None:
-                self.trajectories[name] = {"metric": metric_fn}
+                self.fold_results[name] = {"metric": metric_fn}
             else:
-                self.trajectories[name] = {"metric": metric_fn, model_name: []}
+                self.fold_results[name] = {"metric": metric_fn, model_name: []}
 
-    def update_sklearn_metric(self, y_true, y_pred, name, model_name, k=None):
+    def update_sklearn_metric(self, y_true, y_pred, name, model_name):
         """
 
         :param y_true:
         :param y_pred:
         :param name:
         :param model_name:
-        :param k: if k not None then we assume we are doing a CV with folds, then we track a list for every entry
-            then the trajectories is of form: trajectories[name][model_name] = [[e_1f_1, e_1f_2], ....[e_nf_1, e_nf_2]]
         :return:
         """
-        assert name in self.trajectories
-        val = self.trajectories[name]['metric'](y_true, y_pred)
-        self.direct_update_metric(val, name, model_name, k=k)
+        assert name in self.fold_results
+        val = self.fold_results[name]['metric'](y_true, y_pred)
+        self.direct_update_metric(val, name, model_name)
 
-    def update_fairness_metric(self, X, y, pred, name, model_name, k=None, model=None):
-        assert name in self.trajectories
-        val = self.trajectories[name]['metric'](self.dataset.protected_col, X, y, pred, model=model)
-        self.direct_update_metric(val, name, model_name, k=k)
+    def update_fairness_metric(self, X, y, pred, name, model_name, model=None):
+        assert name in self.fold_results
+        val = self.fold_results[name]['metric'](self.dataset.protected_col, X, y, pred, model=model)
+        self.direct_update_metric(val, name, model_name)
 
-    def direct_update_metric(self, val, name, model_name, k=None):
-        assert name in self.trajectories
-        assert model_name in self.trajectories[name]
-        if k is None:
-            self.trajectories[name][model_name].append(val)
-        else:
-            n_epochs_so_far = len(self.trajectories[name][model_name])
-            if k < n_epochs_so_far:
-                self.trajectories[name][model_name][k].append(val)
-            else:
-                # Then this is the first fold and we need to add the list with value.
-                self.trajectories[name][model_name].append([val])
+    def direct_update_metric(self, val, name, model_name):
+        assert name in self.fold_results
+        assert model_name in self.fold_results[name]
+        self.fold_results[name][model_name].append(val)
         return
 
     def summarize_metric(self, name):
-        assert name in self.trajectories
-        traj = self.trajectories[name]
-        traj.pop('metric')
+        assert name in self.fold_results
+        f_res = self.fold_results[name]
+        f_res.pop('metric')
         data = []
-        columns = ["Fold", "Epoch", name, "Model"]
-        model_0 = list(traj.keys())[0]
-        els = traj[model_0]
-        if type(els[0]) == list:
-            for model_name in traj.keys():
-                epochs = traj[model_name]
-                for epoch in range(len(epochs)):
-                    for fold in range(len(epochs[epoch])):
-                        fold_res = epochs[epoch][fold]
-                        data.append([fold, epoch, fold_res, model_name])
-        else:  # Then its numeric values
-            for model_name in traj.keys():
-                epochs = traj[model_name]
-                for epoch in range(epochs):
-                    data.append([0, epoch, epochs[epoch], model_name])
+        columns = ["Fold", name, "Model"]
+        for model_name in f_res.keys():
+            folds = f_res[model_name]
+            for fold in range(len(folds)):
+                data.append([fold, folds[fold], model_name])
         df = pd.DataFrame(data=data, columns=columns)
-        self.trajectories[name] = df
+        self.fold_results[name] = df
 
     def summarize_metrics(self, join=True):
-        for name in self.trajectories:
+        for name in self.fold_results:
             self.summarize_metric(name)
         if join:
             self.join_trajectories()
 
     def join_trajectories(self):
         if self.df is None:
-            metrics = list(self.trajectories.keys())
+            metrics = list(self.fold_results.keys())
             m = metrics[0]
-            base_df = self.trajectories[m]
+            base_df = self.fold_results[m]
             for metric in metrics[1:]:
-                base_df[metric] = self.trajectories[metric][metric]
-                self.trajectories[metric] = None
+                base_df[metric] = self.fold_results[metric][metric]
+                self.fold_results[metric] = None
             self.df = base_df
 
     def save(self, path):
         if self.df is None:
-            for name in self.trajectories:
-                self.trajectories[name].to_csv(os.path.join(path, f"{name}.csv"), index=False)
+            for name in self.fold_results:
+                self.fold_results[name].to_csv(os.path.join(path, f"{name}.csv"), index=False)
         else:
             self.df.to_csv(os.path.join(path, f"{self.dataset.name}.csv"), index=False)
 
     def load(self, path):
-        self.trajectories = {}
+        self.fold_results = {}
         files = os.listdir(path)
         if f"{self.dataset.name}.csv" in files:
             self.df = pd.read_csv(os.path.join(path, f"{self.dataset.name}.csv"))
@@ -131,12 +111,12 @@ class Evaluator:
                 df = pd.read_csv(os.path.join(path, self.dataset.name, name))
                 if 'Unnamed: 0' in df:
                     df.drop('Unnamed: 0', axis=1, inplace=True)
-                self.trajectories[name[:-4]] = df
+                self.fold_results[name[:-4]] = df
 
     def select_model_subset_df(self, name, model_subset):
         if self.df is None:
-            assert name in self.trajectories
-            df = self.trajectories[name]
+            assert name in self.fold_results
+            df = self.fold_results[name]
             if model_subset is None:
                 model_subset = df["Model"].unique().tolist()
             else:
@@ -156,62 +136,39 @@ class Evaluator:
         :return:
         """
         if self.df is None:
-            assert all([name in self.trajectories for name in names])
-            df = self.trajectories[names[0]]
+            assert all([name in self.fold_results for name in names])
+            df = self.fold_results[names[0]]
             if model_subset is None:
                 model_subset = df["Model"].unique().tolist()
             else:
                 model_subset = list(df["Model"].unique().toset().intersect(set(model_subset)))
             assert len(model_subset) > 0
             for name in names[1:]:
-                df[name] = self.trajectories[name][name]
+                df[name] = self.fold_results[name][name]
             df = df[df["Model"].isin(model_subset)]
         else:
             df = self.df[self.df["Model"].isin(model_subset)]
             df = df[["Fold", "Epoch", "Model"] + names]
         return df
 
-    @staticmethod
-    def get_epoch_string(fold_epoch_switch=True):
-        if fold_epoch_switch:
-            return "Fold"
-        else:
-            return "Epoch"
-
-    def plot_metric_trajectory(self, name, model_subset=None):
-        epoch_string = Evaluator.get_epoch_string()
+    def plot_metric(self, name, model_subset=None, use_base_model=False):
         df = None
         if self.df is None:
-            assert name in self.trajectories and type(self.trajectories[name]) == pd.DataFrame
-            df = self.select_model_subset_df(name, model_subset)
-        else:
-            df = self.df
-        sns.lineplot(data=df, x=epoch_string, y=name, hue="Model")
-        plt.show()
-        return
-
-    def plot_metric_final(self, name, model_subset=None, use_base_model=False):
-        epoch_string = Evaluator.get_epoch_string()
-        df = None
-        if self.df is None:
-            assert name in self.trajectories and type(self.trajectories[name]) == pd.DataFrame
+            assert name in self.fold_results and type(self.fold_results[name]) == pd.DataFrame
             df = self.select_model_subset_df(name, model_subset)
         else:
             df = self.df
         df = df.copy()
         if use_base_model:
             df["Model"] = df["Model"].apply(Evaluator.get_base_model)
-        last_epoch = df[epoch_string].max()
-        last_only = df[df[epoch_string] == last_epoch]
-        sns.boxplot(data=last_only, x="Model", y=name)
+        sns.boxplot(data=df, x="Model", y=name)
         plt.show()
         return
 
     def plot_metrics_final(self, name_0, name_1, model_subset=None, use_base_model=False):
-        epoch_string = Evaluator.get_epoch_string()
         df = None
         if self.df is None:
-            assert [name in self.trajectories and type(self.trajectories[name]) == pd.DataFrame for name in
+            assert [name in self.fold_results and type(self.fold_results[name]) == pd.DataFrame for name in
                     [name_0, name_1]]
             df = self.select_model_subset_df_multi([name_0, name_1], model_subset=model_subset)
         else:
@@ -219,9 +176,7 @@ class Evaluator:
         df = df.copy()
         if use_base_model:
             df["Model"] = df["Model"].apply(Evaluator.get_base_model)
-        last_epoch = df[epoch_string].max()
-        last_only = df[df[epoch_string] == last_epoch]
-        sns.scatterplot(data=last_only, x=name_0, y=name_1, hue="Model", style="Model")
+        sns.scatterplot(data=df, x=name_0, y=name_1, hue="Model", style="Model")
         plt.show()
         return
 
@@ -236,7 +191,7 @@ class Evaluator:
         :return: index that will sort by this
         """
         if self.df is None:
-            df = self.trajectories[metric].copy()
+            df = self.fold_results[metric].copy()
         else:
             df = self.df[metric]
         entries = None
@@ -285,10 +240,7 @@ class Evaluator:
         """
         assert self.df is not None
         frontier = []
-        df = self.df.groupby("Model").mean().drop(["Fold", "Epoch"], axis=1)
-
-
-
+        df = self.df.groupby("Model").mean().drop(["Fold"], axis=1)
 
     @staticmethod
     def get_all_evaluators(datasets=["adults", "compas", "german", "hmda"], path="results/"):
@@ -451,4 +403,11 @@ def tmp():
 
 
 if __name__ == "__main__":
-    tmp()
+    evals = Evaluator.get_all_evaluators(path="results/trees/")
+    for dset in evals:
+        print(f"Working on {dset}")
+        e = evals[dset]
+        e.df["Fold"] = e.df["Epoch"]
+        e.df = e.df.drop("Epoch", axis=1)
+        e.save("results/trees")
+
