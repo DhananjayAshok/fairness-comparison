@@ -69,8 +69,8 @@ class SKLearnModel(AdjustmentModel):
 
 
 class ParetoFront(AdjustmentModel):
-    def __init__(self, protected_col, name="Pareto", models=ModelSets.all_simple, metric=FairnessMetrics.recall_parity, metric_one_optimal=True,
-                 metric_higher_is_better=False, train_size=0.8):
+    def __init__(self, protected_col, name="Pareto", models=ModelSets.all_simple, metric=FairnessMetrics.recall_parity,
+                 metric_one_optimal=True, metric_higher_is_better=False, train_size=0.8):
         AdjustmentModel.__init__(self, name, protected_col)
         self.models = models
         self.best_models = None

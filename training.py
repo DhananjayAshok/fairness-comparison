@@ -14,7 +14,8 @@ warnings.filterwarnings("ignore")
 def train_all(datasets=["compas", "german", "adults", "hmda"], save_dir="results/exhaustive/", n_folds=5,
               lambds=[0.2, 0.5, 0.7], pf_ms=ModelSets.best_models, rs_ms=ModelSets.best_models,
               dc_ms=[RandomForestClassifier(), XGBClassifier(use_label_encoder=False, eval_metric='logloss')],
-              proba_models=ModelSets.best_models_proba, simple_models=ModelSets.best_models):
+              proba_models=ModelSets.best_models_proba, simple_models=ModelSets.best_models,
+              fairness_metric=FairnessMetrics.recall_parity):
     skip_simple = len(simple_models) == 0
     skip_pf = len(pf_ms) == 0
     skip_rs = len(rs_ms) == 0
@@ -35,11 +36,12 @@ def train_all(datasets=["compas", "german", "adults", "hmda"], save_dir="results
             models.extend(base_models)
             true_model_length += len(base_models)
         if not skip_pf:
-            pf = ParetoFront(protected_col=dataset.protected_col, models=pf_ms)
+            pf = ParetoFront(protected_col=dataset.protected_col, models=pf_ms, metric=fairness_metric)
             models.append(pf)
             true_model_length += 1
         if not skip_rs:
-            rs = RegularizedSelection(protected_col=dataset.protected_col, models=rs_ms, lambd=lambds)
+            rs = RegularizedSelection(protected_col=dataset.protected_col, models=rs_ms, lambd=lambds,
+                                      metric=fairness_metric)
             models.append(rs)
             true_model_length += len(lambds)
         if not skip_dcs:

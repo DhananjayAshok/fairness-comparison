@@ -442,10 +442,14 @@ def tmp():
 
 if __name__ == "__main__":
     evals = Evaluator.get_all_evaluators(path="results/trees/")
+    metrics, optimalities = tmp()
     for dset in evals:
         print(f"Working on {dset}")
         e = evals[dset]
-        e.df["Fold"] = e.df["Epoch"]
-        e.df = e.df.drop("Epoch", axis=1)
-        e.save("results/trees")
+        e.display_pareto_tiers(metrics=metrics, optimalities=optimalities)
+        e.display_pareto_tiers(metrics=metrics, optimalities=optimalities, use_base_model=True)
+        
+
+
+
 
