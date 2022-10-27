@@ -32,6 +32,8 @@ class ModelSets:
     best_models_proba = [RandomForestClassifier(n_estimators=n) for n in [50, 100, 200]] + \
                   [XGBClassifier(n_estimators=n, use_label_encoder=False, eval_metric='logloss') for n in [50, 100, 200]] \
                         + [GaussianNB()] + [MLPClassifier(hidden_layer_sizes=h) for h in hidden_layer_sizes]
+    best_trees = [RandomForestClassifier(n_estimators=n) for n in [50, 100, 200]] + \
+                  [XGBClassifier(n_estimators=n, use_label_encoder=False, eval_metric='logloss') for n in [50, 100, 200]]
 
 
 class AdjustmentModel:
