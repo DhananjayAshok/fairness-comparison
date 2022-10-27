@@ -119,7 +119,7 @@ class ParetoFront(AdjustmentModel):
         preds = np.zeros((len(X), len(self.best_models)))
         for i, model in enumerate(self.best_models):
             preds[:, i] = model.predict(X)
-        return (preds.sum(axis=1) > len(preds) / 2).astype(int)
+        return (preds.sum(axis=1) >= len(preds) / 2).astype(int)
 
 
 class RegularizedSelection(AdjustmentModel):
@@ -357,30 +357,6 @@ class DatasetMassage(AdjustmentModel):
 
 if __name__ == "__main__":
     from data import get_dataset
-    from sklearn.model_selection import GridSearchCV
-    import pickle
-    from tqdm import tqdm
-    import warnings
-    warnings.filterwarnings("ignore")
-    datasets = ["german", "adults", "compas"]
-    ridge_params = {"alpha": [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4, 1.6, 1.8, 2, 4, 8]}
-    svc_params = {"C": [0.01, 0.25, 0.5, 1, 1.5, 2, 5, 50], "kernel": ["poly", "rbf", "sigmoid"]}
-    tree_params ={"n_estimators": [10, 50, 100, 200, 500]}
-    for dataset_name in datasets:
-        print(f"Starting Procedure for Dataset {dataset_name}")
-        dataset = get_dataset(dataset_name)
-        X_train, y_train, X_val, y_val = dataset.get_split_data()
-        ridge = RidgeClassifier()
-        svc = SVC()
-        rf = RandomForestClassifier()
-        xg = XGBClassifier()
-        ridge_cv = GridSearchCV(ridge, ridge_params)
-        svc_cv = GridSearchCV(svc, svc_params)
-        rf_cv = GridSearchCV(rf, tree_params)
-        xg_cv = GridSearchCV(xg, tree_params)
-        for name, cv in tqdm([("ridge", ridge_cv), ("svc", svc_cv),  ("rf", rf_cv), ("xg", xg_cv)]):
-            cv.fit(X_train, y_train)
-            with open(f"tmp/{dataset_name}_{name}.pkl", "wb") as f:
-                pickle.dump(cv.cv_results_, f)
-            print(cv.best_estimator_)
+    from eval import Evaluator
+    
 

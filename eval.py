@@ -291,12 +291,12 @@ class Evaluator:
 
 
     @staticmethod
-    def get_all_evaluators(datasets=["adults", "compas", "german", "hmda"]):
+    def get_all_evaluators(datasets=["adults", "compas", "german", "hmda"], path="results/"):
         from data import get_dataset
         res = {}
         for dataset in datasets:
             dset = get_dataset(dataset)
-            path = os.path.join(f"results/")
+            path = os.path.join(path)
             evaluator = Evaluator(dataset=dset)
             evaluator.load(path)
             res[dataset] = evaluator
@@ -441,9 +441,14 @@ class FairnessMetrics:
         return aggregator(group_losses)
 
 
-if __name__ == "__main__":
-    evals = Evaluator.get_all_evaluators()
+def tmp():
+    evals = Evaluator.get_all_evaluators(path="results/trees")
     for dset in evals:
+        print(f"Working on {dset}")
         e = evals[dset]
-        e.join_trajectories()
-        e.save("results")
+        e.plot_metrics_final(vacc, recall)
+        e.plot_metrics_final(vacc, recall, use_base_model=True)
+
+
+if __name__ == "__main__":
+    tmp()

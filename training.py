@@ -131,9 +131,8 @@ def train_all(datasets=["compas", "german", "adults", "hmda"], save_dir="results
 
 
 if __name__ == "__main__":
-    b = [RandomForestClassifier(),
-          XGBClassifier(use_label_encoder=False, eval_metric='logloss')]
-    train_all(datasets=["compas"], save_dir="results/tmp", pf_ms=b, rs_ms=b, dc_ms=b, proba_models=b, simple_models=b)
+    b = ModelSets.best_trees
+    train_all(save_dir="results/trees", pf_ms=b, rs_ms=b, dc_ms=b, proba_models=b, simple_models=b)
 
 
 
