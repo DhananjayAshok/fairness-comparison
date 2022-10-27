@@ -203,17 +203,6 @@ class Evaluator:
         return entries[:k]
 
     @staticmethod
-    def a_better_b(a, b, opt):
-        if opt == "a":
-            return a < b
-        elif optimality == "d":
-            return a > b
-        elif opt == "o":
-            return abs(a - 1) < abs(b - 1)
-        else:
-            raise ValueError
-
-    @staticmethod
     def get_base_model(string):
         from models import ModelSets
         phrase_returns = ["Pareto", "Decoupled"]
@@ -228,9 +217,24 @@ class Evaluator:
         else:
             return "?"
 
-    def get_pareto_frontier_indices(self, metrics, optimalities):
+    @staticmethod
+    def a_better_or_equal_b(a, b, opt):
+        if opt == "a":
+            return a <= b
+        elif opt == "d":
+            return a >= b
+        elif opt == "o":
+            return abs(a - 1) <= abs(b - 1)
+        else:
+            raise ValueError
+
+    @staticmethod
+    def a_worse_b(a, b, opt):
+        return not Evaluator.a_better_or_equal_b(a, b, opt)
+
+    def get_pareto_tiers(self, metrics, optimalities, use_base_model=False, df=None):
         """
-        Get the indices of models which are non_dominated by any metric
+        Returns a list of lists of models: models in list i are dominated by models in list i-1
         :param self:
         :param metrics: list of metric names strings
         :param optimalities: list of either 'a', 'd', or 'o'=> ascending (lower better), descending or one is optimal
@@ -239,8 +243,41 @@ class Evaluator:
         Computes for mean metric value
         """
         assert self.df is not None
-        frontier = []
-        df = self.df.groupby("Model").mean().drop(["Fold"], axis=1)
+        dominated_models = []
+        if df is None:
+            df = self.df.copy()
+            if use_base_model:
+                df["Model"] = df["Model"].apply(Evaluator.get_base_model)
+            df = df.groupby("Model").mean().drop("Fold", axis=1)
+        models = df.index
+        for model in models:
+            for other_model in models:
+                dominated = all([Evaluator.a_worse_b(df.loc[model, metrics[i]], df.loc[other_model, metrics[i]],
+                                                     optimalities[i]) for i in range(len(metrics))])
+                if dominated:
+                    dominated_models.append(model)
+                    break
+        if len(dominated_models) == 0:
+            return [list(models)]
+        else:
+            better_df = df.drop(dominated_models, axis=0)
+            dominated_df = df.loc[dominated_models, :]
+            better_model_tiers = self.get_pareto_tiers(metrics=metrics, optimalities=optimalities, df=better_df)
+            worse_model_tiers = self.get_pareto_tiers(metrics=metrics, optimalities=optimalities, df=dominated_df)
+            return better_model_tiers + worse_model_tiers
+
+    def display_pareto_tiers(self, metrics, optimalities, use_base_model=False, use_base_model_after=False):
+        p_tiers = self.get_pareto_tiers(metrics=metrics, optimalities=optimalities, use_base_model=use_base_model)
+        df = self.df.copy()
+        if use_base_model or use_base_model_after:
+            df["Model"] = df["Model"].apply(Evaluator.get_base_model)
+        df = df.groupby("Model").mean().drop("Fold", axis=1)[metrics]
+        for i, tier in enumerate(p_tiers):
+            if use_base_model_after and not use_base_model:
+                tier = [Evaluator.get_base_model(model) for model in tier]
+            print(f"Tier: {i+1}")
+            print(df.loc[tier, :])
+
 
     @staticmethod
     def get_all_evaluators(datasets=["adults", "compas", "german", "hmda"], path="results/"):
@@ -393,13 +430,15 @@ class FairnessMetrics:
         return aggregator(group_losses)
 
 
+def quick_eval():
+    evals = Evaluator.get_all_evaluators(datasets=["german"], path="results/trees")["german"]
+    return evals
+
+
 def tmp():
-    evals = Evaluator.get_all_evaluators(path="results/trees")
-    for dset in evals:
-        print(f"Working on {dset}")
-        e = evals[dset]
-        e.plot_metrics_final(vacc, recall)
-        e.plot_metrics_final(vacc, recall, use_base_model=True)
+    metrics = [vacc, recall]
+    optimalities = ["d", "o"]
+    return metrics, optimalities
 
 
 if __name__ == "__main__":
