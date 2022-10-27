@@ -278,7 +278,6 @@ class Evaluator:
             print(f"Tier: {i+1}")
             print(df.loc[tier, :])
 
-
     @staticmethod
     def get_all_evaluators(datasets=["adults", "compas", "german", "hmda"], path="results/"):
         from data import get_dataset

@@ -27,8 +27,10 @@ def train_all(datasets=["compas", "german", "adults", "hmda"], save_dir="results
         if not skip_simple:
             base_models = []
             for i, model in enumerate(simple_models):
-                basic = SKLearnModel(model=model, name=f"{model.__class__.__name__}_{i}",
-                                     protected_col=dataset.protected_col)
+                name = f"{model.__class__.__name__}_{i}"
+                if "tree" in save_dir:
+                    name = f"{model.__class__.__name__}_{model.n_estimators}"
+                basic = SKLearnModel(model=model, name=name, protected_col=dataset.protected_col)
                 base_models.append(basic)
             models.extend(base_models)
             true_model_length += len(base_models)
@@ -48,10 +50,13 @@ def train_all(datasets=["compas", "german", "adults", "hmda"], save_dir="results
         if not skip_probas:
             other_models = []
             for i, model in enumerate(proba_models):
+                name = f"{model.__class__.__name__}_{i}"
+                if "tree" in save_dir:
+                    name = f"{model.__class__.__name__}_{model.n_estimators}"
                 rpt = RecallParityThreshold(protected_col=dataset.protected_col, model=model,
-                                            name=f"RPT_{model.__class__.__name__}_{i}")
+                                            name=f"RPT_{name}")
                 dms = [DatasetMassage(protected_col=dataset.protected_col, model=model, lambd=lambd,
-                                      name=f"Massage_{model.__class__.__name__}_{i}_{lambd}") for lambd in lambds]
+                                      name=f"Massage_{name}_{lambd}") for lambd in lambds]
                 other_models.append(rpt)
                 other_models.extend(dms)
             models.extend(other_models)
