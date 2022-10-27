@@ -55,8 +55,10 @@ class AdjustmentModel:
 
 
 class SKLearnModel(AdjustmentModel):
-    def __init__(self, model, name, protected_col):
+    def __init__(self, model, name=None, protected_col=None):
         self.model = model
+        if name is None:
+            name = model.__class__.__name__
         AdjustmentModel.__init__(self, name=name, protected_col=protected_col)
 
     def fit(self, X, y):
@@ -68,10 +70,11 @@ class SKLearnModel(AdjustmentModel):
 
 class ParetoFront(AdjustmentModel):
     def __init__(self, protected_col, name="Pareto", models=ModelSets.all_simple, metric=FairnessMetrics.recall_parity, metric_one_optimal=True,
-                 metric_higher_is_better=False):
+                 metric_higher_is_better=False, train_size=0.8):
         AdjustmentModel.__init__(self, name, protected_col)
         self.models = models
         self.best_models = None
+        self.train_size = train_size
         assert not metric_higher_is_better and metric_one_optimal
         # We will assume higher is better for self.metric_fn
         if metric_one_optimal:
@@ -83,16 +86,19 @@ class ParetoFront(AdjustmentModel):
                 self.metric_fn = lambda X, y, pred: -1 * metric(protected_col, X, y)
 
     def fit(self, X, y):
+        n_samples = int(self.train_size*len(y))
+        X_train, y_train = X[:n_samples], y[:n_samples]
+        X_v, y_v = X[n_samples:], y[n_samples:]
         fitted_models = []
         for model in self.models:
-            fitted_model = model.fit(X, y)
+            fitted_model = model.fit(X_train, y_train)
             fitted_models.append(fitted_model)
         to_remove = []
         model_scores = []
         for fitted_model in fitted_models:
-            pred = fitted_model.predict(X)
-            acc = FairnessMetrics.accuracy(X, y, pred)
-            metric = self.metric_fn(X, y, pred)
+            pred = fitted_model.predict(X_v)
+            acc = FairnessMetrics.accuracy(X_v, y_v, pred)
+            metric = self.metric_fn(X_v, y_v, pred)
             model_scores.append((acc, metric))
         #  print_l = [f"{fitted_models[i].__class__.__name__}: acc {model_scores[i][0]} metric {model_scores[i][1]}"
         #             for i in range(len(models))]
@@ -114,17 +120,20 @@ class ParetoFront(AdjustmentModel):
             if rem in fitted_models:
                 fitted_models.remove(rem)
         self.best_models = fitted_models
+        for model in self.best_models:
+            model.fit(X, y)
 
     def predict(self, X):
-        preds = np.zeros((len(X), len(self.best_models)))
+        preds = np.zeros(len(X))
         for i, model in enumerate(self.best_models):
-            preds[:, i] = model.predict(X)
-        return (preds.sum(axis=1) >= len(preds) / 2).astype(int)
+            preds += model.predict(X)
+        preds = preds / len(self.best_models)
+        return (preds >= 0.5).astype(int)
 
 
 class RegularizedSelection(AdjustmentModel):
     def __init__(self, protected_col, name=f"Regularized_Selection", models=ModelSets.all_simple, lambd=0.8,
-                 metric=FairnessMetrics.recall_parity, metric_one_optimal=True,
+                 metric=FairnessMetrics.recall_parity, metric_one_optimal=True, train_size=0.8,
                  metric_higher_is_better=False):
         """
 
@@ -140,6 +149,7 @@ class RegularizedSelection(AdjustmentModel):
         AdjustmentModel.__init__(self, name, protected_col)
         self.models = models
         self.lambds = lambd
+        self.train_size = train_size
         if type(lambd) != list:
             self.lambds = [lambd]
         else:
@@ -159,22 +169,26 @@ class RegularizedSelection(AdjustmentModel):
         return -(lambd*(FairnessMetrics.accuracy(X, y, pred) + (1-lambd) * (self.metric_fn(X, y, pred))))
 
     def fit(self, X, y):
+        n_samples = int(self.train_size*len(y))
+        X_train, y_train = X[:n_samples], y[:n_samples]
+        X_v, y_v = X[n_samples:], y[n_samples:]
         fitted_models = []
         model_preds = []
         for model in self.models:
-            fitted_models.append(model.fit(X, y))
-            model_preds.append(model.predict(X))
+            fitted_models.append(model.fit(X_train, y_train))
+            model_preds.append(model.predict(X_v))
 
         for lambd in self.lambds:
             best_loss = np.inf
             best_model = None
             for i, fitted_model in enumerate(fitted_models):
                 pred = model_preds[i]
-                loss = self.loss_fn(X, y, pred, lambd)
+                loss = self.loss_fn(X_v, y_v, pred, lambd)
                 if loss < best_loss:
                     best_model = fitted_model
                     best_loss = loss
             self.model_dict[lambd] = best_model
+            self.model_dict[lambd].fit(X, y)
 
     def get_model(self, lambd=None):
         if lambd is None or lambd not in self.model_dict:
